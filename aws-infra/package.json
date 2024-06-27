@@ -1,0 +1,20 @@
+{
+  "scripts": {
+    "build": "npx tsc",
+    "deploy": "node dist/index.js",
+    "deploy-stack": "node dist/deploy-stack.js",
+    "delete-stack": "node dist/delete-stack.js",
+    "deploy-stack:dev": "nodemon src/deploy-stack.ts",
+    "delete-stack:dev": "nodemon src/delete-stack.ts"
+  },
+  "dependencies": {
+    "@types/aws-sdk": "^2.7.0",
+    "aws-sdk": "^2.1649.0",
+    "dotenv": "^16.4.5",
+    "nodemon": "^3.1.4"
+  },
+  "devDependencies": {
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.5.2"
+  }
+}

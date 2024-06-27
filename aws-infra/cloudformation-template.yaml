@@ -1,0 +1,107 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: "Demo web app"
+
+Resources:
+  WebAppBucket:
+    Type: "AWS::S3::Bucket"
+    Properties:
+      BucketName: !Sub ${AWS::StackName}-${AWS::Region}
+      AccessControl: Private
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: TRUE
+        BlockPublicPolicy: TRUE
+        IgnorePublicAcls: TRUE
+        RestrictPublicBuckets: TRUE
+    DeletionPolicy: Delete
+
+  WebAppBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    DependsOn:
+      - WebAppBucket
+      - DemoCloudFrontDistribution
+    Properties:
+      Bucket:
+        Ref: WebAppBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Action:
+              - s3:GetObject
+            Effect: Allow
+            Resource:
+              Fn::Join:
+                - ""
+                - - !GetAtt WebAppBucket.Arn
+                  - /*
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Condition:
+              StringEquals:
+                AWS:SourceArn:
+                  Fn::Join:
+                    - "/"
+                    - - !Sub arn:aws:cloudfront::${AWS::AccountId}:distribution
+                      - !Ref DemoCloudFrontDistribution
+
+  DemoCloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    DependsOn:
+      - WebAppBucket
+      - CloudFrontOAC
+    Properties:
+      DistributionConfig:
+        Comment: "Demo web app"
+        Origins:
+          - DomainName: !GetAtt WebAppBucket.DomainName
+            Id: !Sub ${AWS::StackName}
+            OriginAccessControlId: !Ref CloudFrontOAC
+            S3OriginConfig:
+              OriginAccessIdentity: ""
+        DefaultCacheBehavior:
+          Compress: true
+          DefaultTTL: 0
+          ForwardedValues:
+            QueryString: true
+          MaxTTL: 0
+          TargetOriginId: !Sub ${AWS::StackName}
+          ViewerProtocolPolicy: redirect-to-https
+          FunctionAssociations:
+            - EventType: viewer-request
+              FunctionARN: !GetAtt CloudFrontRedirectToIndexHTMLFunction.FunctionMetadata.FunctionARN
+        Enabled: true
+        DefaultRootObject: index.html
+        IPV6Enabled: true
+
+  CloudFrontOAC:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Description: CloudFront OAC to S3 bucket
+        Name: CloudFrontOAC
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  CloudFrontRedirectToIndexHTMLFunction:
+    Type: AWS::CloudFront::Function
+    Properties:
+      Name: !Sub ${AWS::StackName}-redirect-to-index-html-function
+      AutoPublish: true
+      FunctionCode: |
+        function handler(event) {
+          if (event.request) {
+              var request = event.request
+              var uri = request.uri
+              var uriSplit = uri.split('.')
+
+              if (!uriSplit[1])
+                request.uri = '/index.html'
+              
+              return request
+          }
+          else if (event.response) return event.response
+        }
+      FunctionConfig:
+        Runtime: cloudfront-js-2.0
+        Comment: Redirects application URL paths to `index.html`.
